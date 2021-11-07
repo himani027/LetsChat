@@ -1,0 +1,79 @@
+import * as firebase from 'firebase';
+import 'firebase/auth';
+import firebaseConfig from './firebaseConfig';
+
+// Initialize Firebase App
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
+export const auth = firebase.auth();
+
+export const loginWithEmail = (email, password) =>
+  auth.signInWithEmailAndPassword(email, password);
+
+export const registerWithEmail = (email, password) =>
+  auth.createUserWithEmailAndPassword(email, password);
+
+export const logout = () => auth.signOut();
+
+export const passwordReset = email => auth.sendPasswordResetEmail(email);
+
+
+//////////////////////////////
+
+const firebase = require('firebase');
+
+async function handleEvent(
+  event: UserAttemptedStartSessionEvent,
+  context: Context
+) {
+  const email = event.username; // React Native app sends the user's email as the username
+  const password = event.authParams.password; // React Native app includes the user's password as an auth param
+
+  const userApi = context.getUserApi(); // Preinitialized ChatKitty server-side SDK User API client
+
+  const userCredential = await firebase
+    .auth()
+    .signInWithEmailAndPassword(email, password); // Check Firebase credentials
+
+  // If a ChatKitty user doesn't yet exist for this user, create one
+  await userApi.getUserExists(email).catch(async () => {
+    await userApi.createUser({
+      name: event.username,
+      displayName: userCredential.user.displayName || event.username,
+    });
+  });
+}
+
+
+/////////////////////////////////////////////////////////
+
+const { Expo } = require('expo-server-sdk');
+
+const expo = new Expo(); // create Expo client
+
+async function handleEvent(
+  event: UserReceivedNotificationEvent,
+  context: Context
+) {
+  if (event.userHasActiveSession) return; // skip if this user is online
+
+  const expoPushToken = event.user.properties['expo-push-token']; // get the expo push token registered
+
+  if (!expoPushToken || !Expo.isExpoPushToken(expoPushToken)) return; // check expo push token is present and valid
+
+  const notification = event.notification;
+
+  // send push notification with Expo
+  await expo.sendPushNotificationsAsync([
+    {
+      to: expoPushToken,
+      sound: 'default',
+      title: notification.title,
+      body: notification.body,
+      data: notification.data,
+    },
+  ]);
+}
